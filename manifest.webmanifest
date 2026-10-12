@@ -1,0 +1,16 @@
+{
+  "name": "粗差剔除与不确定度分析工具",
+  "short_name": "不确定度",
+  "description": "肖维涅准则粗差剔除 + t分布A类/仪器误差B类合成不确定度，按绪论规则修约",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "./icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
