@@ -15,6 +15,9 @@ import {
   fullAnalysis, parseDataInput, manyDigits, roundSigFigs,
   type AnalysisResult, type PKey, type RoundResult,
 } from '@/lib/uncertainty'
+import {
+  loadHistory, saveRecord, deleteRecord, clearHistory, type HistoryRecord,
+} from '@/lib/history'
 
 type InstMode = 'marked' | 'estimable' | 'nonestimable'
 
@@ -36,6 +39,9 @@ export default function Home() {
   const [rawBySeq, setRawBySeq] = useState<Map<number, string>>(new Map())
   const [inputErrors, setInputErrors] = useState<string[]>([])
   const [copied, setCopied] = useState(false)
+  const [historyVersion, setHistoryVersion] = useState(0)
+
+  const history = useMemo(() => loadHistory(), [historyVersion])
 
   // Δ仪器 辅助计算：可估读取最小分度一半，不可估读取最小分度
   useEffect(() => {
@@ -54,9 +60,25 @@ export default function Home() {
     if (parsed.values.length < 2) { alert('请至少输入 2 个有效数据'); return }
     if (!(dInst > 0)) { alert('请填写有效的 Δ仪器（大于 0）'); return }
     const res = fullAnalysis(parsed.values, parsed.decimals, dInst, p)
-    setRawBySeq(new Map(parsed.raws.map((r, i) => [i + 1, r])))
+    const map = new Map(parsed.raws.map((r, i) => [i + 1, r]))
+    setRawBySeq(map)
     setResult(res)
     setCopied(false)
+    // 自动保存历史记录
+    const sym = symbol.trim() || 'N'
+    const u2 = unit.trim()
+    const uu2 = u2 ? ` ${u2}` : ''
+    const text = buildCopyText(res, { p, uu: uu2, deltaInstText, symbol: sym, rawBySeq: map })
+    saveRecord({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      time: Date.now(),
+      symbol: sym, unit: u2, p, deltaInst: deltaInstText, dataText,
+      nRaw: parsed.values.length, nFinal: res.nFinal,
+      rejectedCount: parsed.values.length - res.nFinal,
+      resultText: `${sym} = (${res.fin.finalMeanDisplay} ± ${res.fin.UDisplay})${uu2}`,
+      copyText: text,
+    })
+    setHistoryVersion(v => v + 1)
   }
 
   function loadExample() {
@@ -65,43 +87,19 @@ export default function Home() {
     setInstMode(EXAMPLE.mode); setDivision(EXAMPLE.division)
   }
 
+  function loadRecord(rec: HistoryRecord) {
+    setSymbol(rec.symbol); setUnit(rec.unit); setDataText(rec.dataText)
+    setInstMode('marked'); setDeltaInstText(rec.deltaInst); setP(rec.p as PKey)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   const u = unit.trim()
   const uu = u ? ` ${u}` : ''
 
   // 拼装抄写区文本
   const copyText = useMemo(() => {
     if (!result) return ''
-    const lines: string[] = []
-    const lastRound = result.rounds[result.rounds.length - 1]
-    lines.push('【粗差剔除（肖维涅准则）】')
-    result.rounds.forEach((rd) => {
-      if (result.rounds.length > 1) lines.push(`— 第 ${rd.round} 轮（n=${rd.n}）—`)
-      lines.push(`n = ${rd.n}`)
-      lines.push(`N̄ = ${manyDigits(rd.mean, 10)} ≈ ${result.meanAlignedDisplay}${uu}（平均值与测量值位数对齐）`)
-      lines.push(`σ_N（测量值标准偏差）= ${manyDigits(rd.sigmaN)}${uu}`)
-      lines.push(`σ_N̄（平均值标准偏差）= ${manyDigits(rd.sigmaMean)}${uu}`)
-      lines.push(`肖维涅系数 c(n=${rd.n}) = ${rd.c}${rd.cSource === 'theory' ? '（理论公式补得）' : ''}`)
-      lines.push(`剔除限 c·σ_N = ${rd.c} × ${manyDigits(rd.sigmaN)} = ${manyDigits(rd.limit)}${uu}`)
-      rd.rows.forEach((row) => {
-        const raw = rawBySeq.get(row.seq) ?? String(row.value)
-        lines.push(`ΔN_${row.seq} = ${raw} − ${manyDigits(rd.mean, 10)} = ${row.dev >= 0 ? '+' : ''}${manyDigits(row.dev)}${uu}  |ΔN_${row.seq}| = ${manyDigits(row.absDev)} ${row.reject ? `> ${manyDigits(rd.limit)} → 剔除` : `≤ ${manyDigits(rd.limit)} → 保留`}`)
-      })
-      if (rd.rejected.length > 0) {
-        lines.push(`本轮剔除：${rd.rejected.map(r => `第 ${r.seq} 个（${rawBySeq.get(r.seq) ?? r.value}）`).join('、')}`)
-      } else {
-        lines.push('本轮无粗差，通过检验')
-      }
-    })
-    lines.push('')
-    lines.push(`【不确定度分析】（剔除后 n' = ${result.nFinal}）`)
-    lines.push(`t_${p}(n'=${result.nFinal}) = ${result.tp}`)
-    lines.push(`ΔA = t_p·σ_N̄ = ${result.tp} × ${manyDigits(result.sigmaMeanFinal)} = ${manyDigits(result.deltaA)}${uu}`)
-    lines.push(`ΔB = 0.95·Δ仪 = 0.95 × ${deltaInstText} = ${manyDigits(result.deltaB)}${uu}`)
-    lines.push(`U = √(ΔA² + ΔB²) = √(${manyDigits(result.deltaA)}² + ${manyDigits(result.deltaB)}²) = ${manyDigits(result.U, 8)}${uu}`)
-    lines.push(`U 修约：${result.fin.notes.join('；')}，U = ${result.fin.UDisplay}${uu}`)
-    lines.push(`${symbol.trim() || 'N'} = (${result.fin.finalMeanDisplay} ± ${result.fin.UDisplay})${uu}`)
-    void lastRound
-    return lines.join('\n')
+    return buildCopyText(result, { p, uu, deltaInstText, symbol: symbol.trim() || 'N', rawBySeq })
   }, [result, p, uu, deltaInstText, symbol, rawBySeq])
 
   function copyAll() {
@@ -311,12 +309,90 @@ export default function Home() {
           </>
         )}
 
-        <footer className="pt-2 pb-8 text-center text-xs text-slate-400">
-          规则依据：上海科技大学《普通物理实验绪论》2.1–2.2 节 · 肖维涅准则 · t 分布 · GB8170-87 修约
+        {/* ================= 历史记录 ================= */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle className="text-lg">历史记录</CardTitle>
+              <CardDescription>每次计算自动保存在本机浏览器里（最多 50 条），写报告时可翻查</CardDescription>
+            </div>
+            {history.length > 0 && (
+              <Button variant="outline" onClick={() => {
+                if (confirm('确定清空全部历史记录？此操作不可恢复。')) { clearHistory(); setHistoryVersion(v => v + 1) }
+              }}>清空</Button>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {history.length === 0 && (
+              <p className="text-sm text-slate-400">还没有记录——完成一次计算后会自动保存在这里。</p>
+            )}
+            {history.map((rec) => (
+              <div key={rec.id} className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-slate-400">{new Date(rec.time).toLocaleString('zh-CN', { hour12: false })}</span>
+                  <Badge variant="secondary">n={rec.nRaw}→{rec.nFinal}</Badge>
+                  {rec.rejectedCount > 0 && <Badge variant="destructive">剔除 {rec.rejectedCount} 个</Badge>}
+                  <span className="font-mono font-bold">{rec.resultText}</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => loadRecord(rec)}>载入到输入区</Button>
+                  <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(rec.copyText)}>复制完整文本</Button>
+                  <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-600" onClick={() => { deleteRecord(rec.id); setHistoryVersion(v => v + 1) }}>删除</Button>
+                </div>
+                <details className="text-sm">
+                  <summary className="cursor-pointer select-none text-slate-500">展开完整文本</summary>
+                  <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-900 p-3 font-mono text-xs leading-6 text-slate-100">{rec.copyText}</pre>
+                </details>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <footer className="space-y-1 pb-8 pt-2 text-center text-xs text-slate-400">
+          <div>规则依据：上海科技大学《普通物理实验绪论》2.1–2.2 节 · 肖维涅准则 · t 分布 · GB8170-87 修约</div>
+          <div className="font-semibold text-slate-500">版权归EunYan9所有</div>
         </footer>
       </div>
     </div>
   )
+}
+
+// ---------------- 抄写文本拼装 ----------------
+
+function buildCopyText(
+  result: AnalysisResult,
+  opts: { p: string; uu: string; deltaInstText: string; symbol: string; rawBySeq: Map<number, string> },
+): string {
+  const { p, uu, deltaInstText, symbol, rawBySeq } = opts
+  const lines: string[] = []
+  lines.push('【粗差剔除（肖维涅准则）】')
+  result.rounds.forEach((rd) => {
+    if (result.rounds.length > 1) lines.push(`— 第 ${rd.round} 轮（n=${rd.n}）—`)
+    lines.push(`n = ${rd.n}`)
+    lines.push(`N̄ = ${manyDigits(rd.mean, 10)} ≈ ${result.meanAlignedDisplay}${uu}（平均值与测量值位数对齐）`)
+    lines.push(`σ_N（测量值标准偏差）= ${manyDigits(rd.sigmaN)}${uu}`)
+    lines.push(`σ_N̄（平均值标准偏差）= ${manyDigits(rd.sigmaMean)}${uu}`)
+    lines.push(`肖维涅系数 c(n=${rd.n}) = ${rd.c}${rd.cSource === 'theory' ? '（理论公式补得）' : ''}`)
+    lines.push(`剔除限 c·σ_N = ${rd.c} × ${manyDigits(rd.sigmaN)} = ${manyDigits(rd.limit)}${uu}`)
+    rd.rows.forEach((row) => {
+      const raw = rawBySeq.get(row.seq) ?? String(row.value)
+      lines.push(`ΔN_${row.seq} = ${raw} − ${manyDigits(rd.mean, 10)} = ${row.dev >= 0 ? '+' : ''}${manyDigits(row.dev)}${uu}  |ΔN_${row.seq}| = ${manyDigits(row.absDev)} ${row.reject ? `> ${manyDigits(rd.limit)} → 剔除` : `≤ ${manyDigits(rd.limit)} → 保留`}`)
+    })
+    if (rd.rejected.length > 0) {
+      lines.push(`本轮剔除：${rd.rejected.map(r => `第 ${r.seq} 个（${rawBySeq.get(r.seq) ?? r.value}）`).join('、')}`)
+    } else {
+      lines.push('本轮无粗差，通过检验')
+    }
+  })
+  lines.push('')
+  lines.push(`【不确定度分析】（剔除后 n' = ${result.nFinal}）`)
+  lines.push(`t_${p}(n'=${result.nFinal}) = ${result.tp}`)
+  lines.push(`ΔA = t_p·σ_N̄ = ${result.tp} × ${manyDigits(result.sigmaMeanFinal)} = ${manyDigits(result.deltaA)}${uu}`)
+  lines.push(`ΔB = 0.95·Δ仪 = 0.95 × ${deltaInstText} = ${manyDigits(result.deltaB)}${uu}`)
+  lines.push(`U = √(ΔA² + ΔB²) = √(${manyDigits(result.deltaA)}² + ${manyDigits(result.deltaB)}²) = ${manyDigits(result.U, 8)}${uu}`)
+  lines.push(`U 修约：${result.fin.notes.join('；')}，U = ${result.fin.UDisplay}${uu}`)
+  lines.push(`${symbol} = (${result.fin.finalMeanDisplay} ± ${result.fin.UDisplay})${uu}`)
+  return lines.join('\n')
 }
 
 // ---------------- 子组件 ----------------

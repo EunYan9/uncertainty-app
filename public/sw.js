@@ -1,5 +1,7 @@
-// PWA 离线缓存 Service Worker（cache-first + 运行时缓存）
-const CACHE = 'uncertainty-pwa-v1';
+// PWA 离线缓存 Service Worker
+// 页面导航：网络优先（保证部署新版本后立即更新），离线时回退缓存
+// 静态资源（带 hash 的 js/css、图标）：缓存优先，未命中回源并写入缓存
+const CACHE = 'uncertainty-pwa-v2';
 const PRECACHE = ['./', './index.html', './manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
@@ -18,6 +20,18 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).then((resp) => {
+        const copy = resp.clone();
+        caches.open(CACHE).then((cache) => cache.put('./index.html', copy));
+        return resp;
+      }).catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request, { ignoreSearch: true }).then((hit) => {
       if (hit) return hit;
@@ -27,7 +41,7 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE).then((cache) => cache.put(event.request, copy));
         }
         return resp;
-      }).catch(() => caches.match('./index.html'));
+      });
     })
   );
 });
