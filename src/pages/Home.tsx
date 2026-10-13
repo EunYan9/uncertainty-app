@@ -21,12 +21,6 @@ import {
 
 type InstMode = 'marked' | 'estimable' | 'nonestimable'
 
-const EXAMPLE = {
-  symbol: 'L', unit: 'cm',
-  data: '63.57 63.58 63.55 63.56 63.56 63.59 63.55 63.54 63.57 63.57',
-  mode: 'estimable' as InstMode, division: '0.1',
-}
-
 export default function Home() {
   const [symbol, setSymbol] = useState('N')
   const [unit, setUnit] = useState('')
@@ -81,12 +75,6 @@ export default function Home() {
     setHistoryVersion(v => v + 1)
   }
 
-  function loadExample() {
-    setSymbol(EXAMPLE.symbol); setUnit(EXAMPLE.unit)
-    setDataText(EXAMPLE.data)
-    setInstMode(EXAMPLE.mode); setDivision(EXAMPLE.division)
-  }
-
   function loadRecord(rec: HistoryRecord) {
     setSymbol(rec.symbol); setUnit(rec.unit); setDataText(rec.dataText)
     setInstMode('marked'); setDeltaInstText(rec.deltaInst); setP(rec.p as PKey)
@@ -126,7 +114,7 @@ export default function Home() {
             <CardDescription>数据支持空格 / 逗号 / 换行分隔；请按原始读数填写（位数决定平均值的对齐精度）</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <div className="space-y-1.5">
                 <Label>物理量符号</Label>
                 <Input value={symbol} onChange={e => setSymbol(e.target.value)} placeholder="N" />
@@ -147,9 +135,6 @@ export default function Home() {
                     <SelectItem value="0.99">99%</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="flex items-end">
-                <Button variant="outline" className="w-full" onClick={loadExample}>载入绪论例题数据</Button>
               </div>
             </div>
 

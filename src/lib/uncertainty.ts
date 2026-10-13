@@ -299,17 +299,17 @@ export function finalizeResult(U: number, meanAligned: number, measPlaceExp: num
       placeExp: measPlaceExp, notes: ['U = 0，平均值保持测量精度位'],
     };
   }
-  const { digits } = toDigits(U);
+  const { digits, exp } = toDigits(U); // exp = U 首位有效数字所在的位（如 0.047 → -2）
   const alpha = parseInt(digits[0], 10);
   const m = alpha <= 2 ? 2 : 1;
   notes.push(alpha <= 2
     ? `U 首位有效数字 α=${alpha} ≤ 2，U 保留 2 位有效数字`
     : `U 首位有效数字 α=${alpha} ≥ 3，U 保留 1 位有效数字`);
   const Ur = roundSigFigs(U, m, 'halfUp');
-  const pU = toDigits(Ur).exp - (m - 1);
+  const pU = toDigits(Ur).exp - (m - 1); // U 修约值末位所在的位
 
-  if (pU < measPlaceExp) {
-    // U 更细：尝试把 U 修约到平均值精度位（凑偶，对应幻灯片 α≤5 / α≥6 分界）
+  if (exp < measPlaceExp) {
+    // 情形2：U 的首位比平均值精度位更细 → 试修约到平均值位（GB8170 凑偶，对应幻灯片 α≤5 / α≥6 分界）
     const up = roundAtPlace(U, measPlaceExp, 'halfEven');
     if (up > 0) {
       notes.push(`U 修约到平均值精度位后非零（首位 ≥6），取 U=${formatAtPlace(up, measPlaceExp)}，平均值不变`);
@@ -326,15 +326,20 @@ export function finalizeResult(U: number, meanAligned: number, measPlaceExp: num
       placeExp: pU, notes,
     };
   }
-  if (pU === measPlaceExp) {
-    notes.push('U 末位与平均值精度位一致，直接对齐');
+  if (exp === measPlaceExp) {
+    // 情形1：U 的首位与平均值同位 → U 保留 1~2 位有效数字
+    if (pU < measPlaceExp) {
+      notes.push('U 末位比平均值精度位细，平均值末位补 0 对齐');
+    } else {
+      notes.push('U 末位与平均值精度位一致，直接对齐');
+    }
     return {
       URaw: U, URounded: Ur, UDisplay: formatAtPlace(Ur, pU),
       finalMean: meanAligned, finalMeanDisplay: formatAtPlace(meanAligned, pU),
       placeExp: pU, notes,
     };
   }
-  // U 更粗：平均值修约到 U 的末位
+  // 情形3：U 的首位比平均值位粗 → U 取修约值，平均值四舍五入修约到 U 的末位
   const mAligned = roundAtPlace(meanAligned, pU, 'halfUp');
   notes.push(`U 末位比平均值精度位粗，平均值按四舍五入修约到 U 的末位`);
   return {
