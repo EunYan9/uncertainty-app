@@ -111,7 +111,7 @@ export default function Home() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">输入</CardTitle>
-            <CardDescription>数据支持空格 / 逗号 / 换行分隔；请按原始读数填写（位数决定平均值的对齐精度）</CardDescription>
+            <CardDescription>数据之间请用中文或英文分号（；;）分隔，一目了然（逗号、换行也能识别）；请按原始读数填写（位数决定平均值的对齐精度）</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -143,7 +143,7 @@ export default function Home() {
               <Textarea
                 rows={4}
                 className="font-mono text-sm"
-                placeholder="63.57 63.58 63.55 63.56 …"
+                placeholder="63.57；63.58；63.55；63.56 …"
                 value={dataText}
                 onChange={e => setDataText(e.target.value)}
               />
